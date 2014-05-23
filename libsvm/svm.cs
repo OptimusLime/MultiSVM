@@ -22,6 +22,9 @@
 //
 using System;
 using System.IO;
+using System.Threading.Tasks;
+
+using svm_node = System.Double;
 
 namespace Encog.MathUtil.LIBSVM
 {
@@ -312,26 +315,34 @@ namespace Encog.MathUtil.LIBSVM
         internal static double dot(svm_node[] x, svm_node[] y)
         {
             //DFN-Paul: This is always going to be on compatible dudes
-            if(x.Length != y.Length)
+            if (x.Length != y.Length)
+                throw new Exception("Dot product between equal sized arrays, please");
 
             double sum = 0;
             int xlen = x.Length;
-            int ylen = y.Length;
-            int i = 0;
-            int j = 0;
-            while (i < xlen && j < ylen)
+            for (int i = 0; i < xlen; i++)
             {
-                if (x[i].index == y[j].index)
-                    sum += x[i++].value_Renamed*y[j++].value_Renamed;
-                else
-                {
-                    if (x[i].index > y[j].index)
-                        ++j;
-                    else
-                        ++i;
-                }
+                //sum += x[i].value_Renamed * y[i].value_Renamed;
+                //for when this is a double array, THIS CODE SHALL LIVE DAMNIT
+                sum += x[i] * y[i];
             }
             return sum;
+            //int ylen = y.Length;
+            //int i = 0;
+            //int j = 0;
+            //while (i < xlen && j < ylen)
+            //{
+            //    if (x[i].index == y[j].index)
+            //        sum += x[i++].value_Renamed*y[j++].value_Renamed;
+            //    else
+            //    {
+            //        if (x[i].index > y[j].index)
+            //            ++j;
+            //        else
+            //            ++i;
+            //    }
+            //}
+            //return sum;
         }
 
         internal static double k_function(svm_node[] x, svm_node[] y, svm_parameter param)
@@ -957,12 +968,12 @@ namespace Encog.MathUtil.LIBSVM
         private readonly Cache cache;
         private readonly sbyte[] y;
 
-        internal SVC_Q(svm_problem prob, svm_parameter param, sbyte[] y_) : base(prob.l, prob.x, param)
+        internal SVC_Q(svm_problem prob, svm_parameter param, sbyte[] y_) : base(prob.dimensionality, prob.inputs, param)
         {
             y = new sbyte[y_.Length];
             y_.CopyTo(y, 0);
             //UPGRADE_WARNING: Data types in Visual C# might be different.  Verify the accuracy of narrowing conversions. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1042_3"'
-            cache = new Cache(prob.l, (int) (param.cache_size*(1 << 20)));
+            cache = new Cache(prob.dimensionality, (int) (param.cache_size*(1 << 20)));
         }
 
         internal override float[] get_Q(int i, int len)
@@ -1002,7 +1013,7 @@ namespace Encog.MathUtil.LIBSVM
         private static void solve_c_svc(svm_problem prob, svm_parameter param, double[] alpha, Solver.SolutionInfo si,
                                         double Cp, double Cn)
         {
-            int l = prob.l;
+            int l = prob.dimensionality;
             var minus_ones = new double[l];
             var y = new sbyte[l];
 
@@ -1046,7 +1057,7 @@ namespace Encog.MathUtil.LIBSVM
 
         internal static decision_function svm_train_one(svm_problem prob, svm_parameter param, double Cp, double Cn)
         {
-            var alpha = new double[prob.l];
+            var alpha = new double[prob.dimensionality];
             var si = new Solver.SolutionInfo();
             switch (param.svm_type)
             {
@@ -1061,7 +1072,7 @@ namespace Encog.MathUtil.LIBSVM
 
             int nSV = 0;
             int nBSV = 0;
-            for (int i = 0; i < prob.l; i++)
+            for (int i = 0; i < prob.dimensionality; i++)
             {
                 if (Math.Abs(alpha[i]) > 0)
                 {
@@ -1290,16 +1301,16 @@ namespace Encog.MathUtil.LIBSVM
         {
             int i;
             int nr_fold = 5;
-            var perm = new int[prob.l];
-            var dec_values = new double[prob.l];
+            var perm = new int[prob.dimensionality];
+            var dec_values = new double[prob.dimensionality];
 
             // random shuffle
-            for (i = 0; i < prob.l; i++)
+            for (i = 0; i < prob.dimensionality; i++)
                 perm[i] = i;
-            for (i = 0; i < prob.l; i++)
+            for (i = 0; i < prob.dimensionality; i++)
             {
                 //UPGRADE_WARNING: Data types in Visual C# might be different.  Verify the accuracy of narrowing conversions. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1042_3"'
-                int j = i + (int) (SupportClass.Random.NextDouble()*(prob.l - i));
+                int j = i + (int) (SupportClass.Random.NextDouble()*(prob.dimensionality - i));
                 do
                 {
                     int _ = perm[i];
@@ -1309,25 +1320,25 @@ namespace Encog.MathUtil.LIBSVM
             }
             for (i = 0; i < nr_fold; i++)
             {
-                int begin = i*prob.l/nr_fold;
-                int end = (i + 1)*prob.l/nr_fold;
+                int begin = i*prob.dimensionality/nr_fold;
+                int end = (i + 1)*prob.dimensionality/nr_fold;
                 int j, k;
                 var subprob = new svm_problem();
 
-                subprob.l = prob.l - (end - begin);
-                subprob.x = new svm_node[subprob.l][];
-                subprob.y = new double[subprob.l];
+                subprob.dimensionality = prob.dimensionality - (end - begin);
+                subprob.inputs = new svm_node[subprob.dimensionality][];
+                subprob.y = new double[subprob.dimensionality];
 
                 k = 0;
                 for (j = 0; j < begin; j++)
                 {
-                    subprob.x[k] = prob.x[perm[j]];
+                    subprob.inputs[k] = prob.inputs[perm[j]];
                     subprob.y[k] = prob.y[perm[j]];
                     ++k;
                 }
-                for (j = end; j < prob.l; j++)
+                for (j = end; j < prob.dimensionality; j++)
                 {
-                    subprob.x[k] = prob.x[perm[j]];
+                    subprob.inputs[k] = prob.inputs[perm[j]];
                     subprob.y[k] = prob.y[perm[j]];
                     ++k;
                 }
@@ -1363,14 +1374,14 @@ namespace Encog.MathUtil.LIBSVM
                     for (j = begin; j < end; j++)
                     {
                         var dec_value = new double[1];
-                        svm_predict_values(submodel, prob.x[perm[j]], dec_value);
+                        svm_predict_values(submodel, prob.inputs[perm[j]], dec_value);
                         dec_values[perm[j]] = dec_value[0];
                         // ensure +1 -1 order; reason not using CV subroutine
                         dec_values[perm[j]] *= submodel.label[0];
                     }
                 }
             }
-            sigmoid_train(prob.l, dec_values, prob.y, probAB);
+            sigmoid_train(prob.dimensionality, dec_values, prob.y, probAB);
         }
 
         // Return parameter of a Laplace distribution 
@@ -1378,27 +1389,27 @@ namespace Encog.MathUtil.LIBSVM
         {
             int i;
             int nr_fold = 5;
-            var ymv = new double[prob.l];
+            var ymv = new double[prob.dimensionality];
             double mae = 0;
 
             var newparam = (svm_parameter) param.Clone();
             newparam.probability = 0;
             svm_cross_validation(prob, newparam, nr_fold, ymv);
-            for (i = 0; i < prob.l; i++)
+            for (i = 0; i < prob.dimensionality; i++)
             {
                 ymv[i] = prob.y[i] - ymv[i];
                 mae += Math.Abs(ymv[i]);
             }
-            mae /= prob.l;
+            mae /= prob.dimensionality;
             double std = Math.Sqrt(2*mae*mae);
             int count = 0;
             mae = 0;
-            for (i = 0; i < prob.l; i++)
+            for (i = 0; i < prob.dimensionality; i++)
                 if (Math.Abs(ymv[i]) > 5*std)
                     count = count + 1;
                 else
                     mae += Math.Abs(ymv[i]);
-            mae /= (prob.l - count);
+            mae /= (prob.dimensionality - count);
             /*Console.Error.Write(
                 "Prob. model for test data: target value = predicted value + z,\nz: Laplace distribution e^(-|z|/sigma)/(2sigma),sigma=" +
                 mae + "\n");*/
@@ -1416,7 +1427,7 @@ namespace Encog.MathUtil.LIBSVM
           
                 // classification
                 // find out the number of classes
-                int l = prob.l;
+                int l = prob.dimensionality;
                 int max_nr_class = 16;
                 int nr_class = 0;
                 var label = new int[max_nr_class];
@@ -1466,7 +1477,7 @@ namespace Encog.MathUtil.LIBSVM
 
                 for (i = 0; i < l; i++)
                 {
-                    x[start[index[i]]] = prob.x[i];
+                    x[start[index[i]]] = prob.inputs[i];
                     ++start[index[i]];
                 }
 
@@ -1513,18 +1524,18 @@ namespace Encog.MathUtil.LIBSVM
                         var sub_prob = new svm_problem();
                         int si = start[i], sj = start[j];
                         int ci = count[i], cj = count[j];
-                        sub_prob.l = ci + cj;
-                        sub_prob.x = new svm_node[sub_prob.l][];
-                        sub_prob.y = new double[sub_prob.l];
+                        sub_prob.dimensionality = ci + cj;
+                        sub_prob.inputs = new svm_node[sub_prob.dimensionality][];
+                        sub_prob.y = new double[sub_prob.dimensionality];
                         int k;
                         for (k = 0; k < ci; k++)
                         {
-                            sub_prob.x[k] = x[si + k];
+                            sub_prob.inputs[k] = x[si + k];
                             sub_prob.y[k] = + 1;
                         }
                         for (k = 0; k < cj; k++)
                         {
-                            sub_prob.x[ci + k] = x[sj + k];
+                            sub_prob.inputs[ci + k] = x[sj + k];
                             sub_prob.y[ci + k] = - 1;
                         }
 
@@ -1639,15 +1650,15 @@ namespace Encog.MathUtil.LIBSVM
         public static void svm_cross_validation(svm_problem prob, svm_parameter param, int nr_fold, double[] target)
         {
             int i;
-            var perm = new int[prob.l];
+            var perm = new int[prob.dimensionality];
 
             // random shuffle
-            for (i = 0; i < prob.l; i++)
+            for (i = 0; i < prob.dimensionality; i++)
                 perm[i] = i;
-            for (i = 0; i < prob.l; i++)
+            for (i = 0; i < prob.dimensionality; i++)
             {
                 //UPGRADE_WARNING: Data types in Visual C# might be different.  Verify the accuracy of narrowing conversions. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1042_3"'
-                int j = i + (int) (SupportClass.Random.NextDouble()*(prob.l - i));
+                int j = i + (int) (SupportClass.Random.NextDouble()*(prob.dimensionality - i));
                 do
                 {
                     int _ = perm[i];
@@ -1657,25 +1668,25 @@ namespace Encog.MathUtil.LIBSVM
             }
             for (i = 0; i < nr_fold; i++)
             {
-                int begin = i*prob.l/nr_fold;
-                int end = (i + 1)*prob.l/nr_fold;
+                int begin = i*prob.dimensionality/nr_fold;
+                int end = (i + 1)*prob.dimensionality/nr_fold;
                 int j, k;
                 var subprob = new svm_problem();
 
-                subprob.l = prob.l - (end - begin);
-                subprob.x = new svm_node[subprob.l][];
-                subprob.y = new double[subprob.l];
+                subprob.dimensionality = prob.dimensionality - (end - begin);
+                subprob.inputs = new svm_node[subprob.dimensionality][];
+                subprob.y = new double[subprob.dimensionality];
 
                 k = 0;
                 for (j = 0; j < begin; j++)
                 {
-                    subprob.x[k] = prob.x[perm[j]];
+                    subprob.inputs[k] = prob.inputs[perm[j]];
                     subprob.y[k] = prob.y[perm[j]];
                     ++k;
                 }
-                for (j = end; j < prob.l; j++)
+                for (j = end; j < prob.dimensionality; j++)
                 {
-                    subprob.x[k] = prob.x[perm[j]];
+                    subprob.inputs[k] = prob.inputs[perm[j]];
                     subprob.y[k] = prob.y[perm[j]];
                     ++k;
                 }
@@ -1685,11 +1696,11 @@ namespace Encog.MathUtil.LIBSVM
                 {
                     var prob_estimates = new double[svm_get_nr_class(submodel)];
                     for (j = begin; j < end; j++)
-                        target[perm[j]] = svm_predict_probability(submodel, prob.x[perm[j]], prob_estimates);
+                        target[perm[j]] = svm_predict_probability(submodel, prob.inputs[perm[j]], prob_estimates);
                 }
                 else
                     for (j = begin; j < end; j++)
-                        target[perm[j]] = svm_predict(submodel, prob.x[perm[j]]);
+                        target[perm[j]] = svm_predict(submodel, prob.inputs[perm[j]]);
             }
         }
 
@@ -1826,236 +1837,7 @@ namespace Encog.MathUtil.LIBSVM
                 return svm_predict(model, x);
         }
 
-        //UPGRADE_NOTE: Final was removed from the declaration of 'svm_type_table'. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1003_3"'
-        internal static readonly String[] svm_type_table = new[]
-                                                               {"c_svc", "nu_svc", "one_class", "epsilon_svr", "nu_svr"};
-
-        //UPGRADE_NOTE: Final was removed from the declaration of 'kernel_type_table'. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1003_3"'
-        internal static readonly String[] kernel_type_table = new[] {"linear", "polynomial", "rbf", "sigmoid"};
-
-        public static void svm_save_model(StreamWriter fp, svm_model model)
-        {
-            svm_parameter param = model.param;
-
-            fp.Write("svm_type " + svm_type_table[param.svm_type] + "\n");
-            fp.Write("kernel_type " + kernel_type_table[param.kernel_type] + "\n");
-
-
-            int nr_class = model.nr_class;
-            int l = model.l;
-            fp.Write("nr_class " + nr_class + "\n");
-            fp.Write("total_sv " + l + "\n");
-
-            {
-                fp.Write("rho");
-                for (int i = 0; i < nr_class*(nr_class - 1)/2; i++)
-                    fp.Write(" " + model.rho[i]);
-                fp.Write("\n");
-            }
-
-            if (model.label != null)
-            {
-                fp.Write("label");
-                for (int i = 0; i < nr_class; i++)
-                    fp.Write(" " + model.label[i]);
-                fp.Write("\n");
-            }
-
-            if (model.probA != null)
-                // regression has probA only
-            {
-                fp.Write("probA");
-                for (int i = 0; i < nr_class*(nr_class - 1)/2; i++)
-                    fp.Write(" " + model.probA[i]);
-                fp.Write("\n");
-            }
-            if (model.probB != null)
-            {
-                fp.Write("probB");
-                for (int i = 0; i < nr_class*(nr_class - 1)/2; i++)
-                    fp.Write(" " + model.probB[i]);
-                fp.Write("\n");
-            }
-
-            if (model.nSV != null)
-            {
-                fp.Write("nr_sv");
-                for (int i = 0; i < nr_class; i++)
-                    fp.Write(" " + model.nSV[i]);
-                fp.Write("\n");
-            }
-
-            fp.Write("SV\n");
-            double[][] sv_coef = model.sv_coef;
-            svm_node[][] SV = model.SV;
-
-            for (int i = 0; i < l; i++)
-            {
-                for (int j = 0; j < nr_class - 1; j++)
-                    fp.Write(sv_coef[j][i] + " ");
-
-                svm_node[] p = SV[i];
-                for (int j = 0; j < p.Length; j++)
-                    fp.Write(p[j].index + ":" + p[j].value_Renamed + " ");
-                fp.Write("\n");
-            }
-
-            fp.Close();
-        }
-
-        private static double atof(String s)
-        {
-            return Double.Parse(s);
-        }
-
-        private static int atoi(String s)
-        {
-            return Int32.Parse(s);
-        }
-
-        public static svm_model svm_load_model(StringReader fp)
-        {
-            // read parameters
-
-            var model = new svm_model();
-            var param = new svm_parameter();
-            model.param = param;
-            model.rho = null;
-            model.probA = null;
-            model.probB = null;
-            model.label = null;
-            model.nSV = null;
-
-            while (true)
-            {
-                String cmd = fp.ReadLine();
-                String arg = cmd.Substring(cmd.IndexOf(' ') + 1);
-
-                if (cmd.StartsWith("svm_type"))
-                {
-                    int i;
-                    for (i = 0; i < svm_type_table.Length; i++)
-                    {
-                        if (arg.IndexOf(svm_type_table[i]) != -1)
-                        {
-                            param.svm_type = i;
-                            break;
-                        }
-                    }
-                    if (i == svm_type_table.Length)
-                    {
-                        //Console.Error.Write("unknown svm type.\n");
-                        return null;
-                    }
-                }
-                else if (cmd.StartsWith("kernel_type"))
-                {
-                    int i;
-                    for (i = 0; i < kernel_type_table.Length; i++)
-                    {
-                        if (arg.IndexOf(kernel_type_table[i]) != -1)
-                        {
-                            param.kernel_type = i;
-                            break;
-                        }
-                    }
-                    if (i == kernel_type_table.Length)
-                    {
-                        //Console.Error.Write("unknown kernel function.\n");
-                        return null;
-                    }
-                }
-                else if (cmd.StartsWith("degree"))
-                    param.degree = atof(arg);
-                else if (cmd.StartsWith("gamma"))
-                    param.gamma = atof(arg);
-                else if (cmd.StartsWith("coef0"))
-                    param.coef0 = atof(arg);
-                else if (cmd.StartsWith("nr_class"))
-                    model.nr_class = atoi(arg);
-                else if (cmd.StartsWith("total_sv"))
-                    model.l = atoi(arg);
-                else if (cmd.StartsWith("rho"))
-                {
-                    int n = model.nr_class*(model.nr_class - 1)/2;
-                    model.rho = new double[n];
-                    var st = new SupportClass.Tokenizer(arg);
-                    for (int i = 0; i < n; i++)
-                        model.rho[i] = atof(st.NextToken());
-                }
-                else if (cmd.StartsWith("label"))
-                {
-                    int n = model.nr_class;
-                    model.label = new int[n];
-                    var st = new SupportClass.Tokenizer(arg);
-                    for (int i = 0; i < n; i++)
-                        model.label[i] = atoi(st.NextToken());
-                }
-                else if (cmd.StartsWith("probA"))
-                {
-                    int n = model.nr_class*(model.nr_class - 1)/2;
-                    model.probA = new double[n];
-                    var st = new SupportClass.Tokenizer(arg);
-                    for (int i = 0; i < n; i++)
-                        model.probA[i] = atof(st.NextToken());
-                }
-                else if (cmd.StartsWith("probB"))
-                {
-                    int n = model.nr_class*(model.nr_class - 1)/2;
-                    model.probB = new double[n];
-                    var st = new SupportClass.Tokenizer(arg);
-                    for (int i = 0; i < n; i++)
-                        model.probB[i] = atof(st.NextToken());
-                }
-                else if (cmd.StartsWith("nr_sv"))
-                {
-                    int n = model.nr_class;
-                    model.nSV = new int[n];
-                    var st = new SupportClass.Tokenizer(arg);
-                    for (int i = 0; i < n; i++)
-                        model.nSV[i] = atoi(st.NextToken());
-                }
-                else if (cmd.StartsWith("SV"))
-                {
-                    break;
-                }
-                else
-                {
-                    //Console.Error.Write("unknown text in model file\n");
-                    return null;
-                }
-            }
-
-            // read sv_coef and SV
-
-            int m = model.nr_class - 1;
-            int l = model.l;
-            model.sv_coef = new double[m][];
-            for (int i = 0; i < m; i++)
-            {
-                model.sv_coef[i] = new double[l];
-            }
-            model.SV = new svm_node[l][];
-
-            for (int i = 0; i < l; i++)
-            {
-                String line = fp.ReadLine();
-                var st = new SupportClass.Tokenizer(line, " \t\n\r\f:");
-
-                for (int k = 0; k < m; k++)
-                    model.sv_coef[k][i] = atof(st.NextToken());
-                int n = st.Count/2;
-                model.SV[i] = new svm_node[n];
-                for (int j = 0; j < n; j++)
-                {
-                    model.SV[i][j] = new svm_node();
-                    model.SV[i][j].index = atoi(st.NextToken());
-                    model.SV[i][j].value_Renamed = atof(st.NextToken());
-                }
-            }
-
-            return model;
-        }
+     
 
         public static String svm_check_parameter(svm_problem prob, svm_parameter param)
         {
@@ -2102,5 +1884,240 @@ namespace Encog.MathUtil.LIBSVM
             else
                 return 0;
         }
+
+        #region Save/Load [Dead Code]
+
+        //UPGRADE_NOTE: Final was removed from the declaration of 'svm_type_table'. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1003_3"'
+        //internal static readonly String[] svm_type_table = new[]
+        //                                                       {"c_svc", "nu_svc", "one_class", "epsilon_svr", "nu_svr"};
+
+        //UPGRADE_NOTE: Final was removed from the declaration of 'kernel_type_table'. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1003_3"'
+        //internal static readonly String[] kernel_type_table = new[] {"linear", "polynomial", "rbf", "sigmoid"};
+
+        //public static void svm_save_model(StreamWriter fp, svm_model model)
+        //{
+        //    svm_parameter param = model.param;
+
+        //    fp.Write("svm_type " + svm_type_table[param.svm_type] + "\n");
+        //    fp.Write("kernel_type " + kernel_type_table[param.kernel_type] + "\n");
+
+
+        //    int nr_class = model.nr_class;
+        //    int l = model.l;
+        //    fp.Write("nr_class " + nr_class + "\n");
+        //    fp.Write("total_sv " + l + "\n");
+
+        //    {
+        //        fp.Write("rho");
+        //        for (int i = 0; i < nr_class*(nr_class - 1)/2; i++)
+        //            fp.Write(" " + model.rho[i]);
+        //        fp.Write("\n");
+        //    }
+
+        //    if (model.label != null)
+        //    {
+        //        fp.Write("label");
+        //        for (int i = 0; i < nr_class; i++)
+        //            fp.Write(" " + model.label[i]);
+        //        fp.Write("\n");
+        //    }
+
+        //    if (model.probA != null)
+        //        // regression has probA only
+        //    {
+        //        fp.Write("probA");
+        //        for (int i = 0; i < nr_class*(nr_class - 1)/2; i++)
+        //            fp.Write(" " + model.probA[i]);
+        //        fp.Write("\n");
+        //    }
+        //    if (model.probB != null)
+        //    {
+        //        fp.Write("probB");
+        //        for (int i = 0; i < nr_class*(nr_class - 1)/2; i++)
+        //            fp.Write(" " + model.probB[i]);
+        //        fp.Write("\n");
+        //    }
+
+        //    if (model.nSV != null)
+        //    {
+        //        fp.Write("nr_sv");
+        //        for (int i = 0; i < nr_class; i++)
+        //            fp.Write(" " + model.nSV[i]);
+        //        fp.Write("\n");
+        //    }
+
+        //    fp.Write("SV\n");
+        //    double[][] sv_coef = model.sv_coef;
+        //    svm_node[][] SV = model.SV;
+
+        //    for (int i = 0; i < l; i++)
+        //    {
+        //        for (int j = 0; j < nr_class - 1; j++)
+        //            fp.Write(sv_coef[j][i] + " ");
+
+        //        svm_node[] p = SV[i];
+        //        for (int j = 0; j < p.Length; j++)
+        //            fp.Write(j + ":" + p[j].value_Renamed + " ");
+        //        fp.Write("\n");
+        //    }
+
+        //    fp.Close();
+        //}
+
+        //private static double atof(String s)
+        //{
+        //    return Double.Parse(s);
+        //}
+
+        //private static int atoi(String s)
+        //{
+        //    return Int32.Parse(s);
+        //}
+
+        //public static svm_model svm_load_model(StringReader fp)
+        //{
+        //    // read parameters
+
+        //    var model = new svm_model();
+        //    var param = new svm_parameter();
+        //    model.param = param;
+        //    model.rho = null;
+        //    model.probA = null;
+        //    model.probB = null;
+        //    model.label = null;
+        //    model.nSV = null;
+
+        //    while (true)
+        //    {
+        //        String cmd = fp.ReadLine();
+        //        String arg = cmd.Substring(cmd.IndexOf(' ') + 1);
+
+        //        if (cmd.StartsWith("svm_type"))
+        //        {
+        //            int i;
+        //            for (i = 0; i < svm_type_table.Length; i++)
+        //            {
+        //                if (arg.IndexOf(svm_type_table[i]) != -1)
+        //                {
+        //                    param.svm_type = i;
+        //                    break;
+        //                }
+        //            }
+        //            if (i == svm_type_table.Length)
+        //            {
+        //                //Console.Error.Write("unknown svm type.\n");
+        //                return null;
+        //            }
+        //        }
+        //        else if (cmd.StartsWith("kernel_type"))
+        //        {
+        //            int i;
+        //            for (i = 0; i < kernel_type_table.Length; i++)
+        //            {
+        //                if (arg.IndexOf(kernel_type_table[i]) != -1)
+        //                {
+        //                    param.kernel_type = i;
+        //                    break;
+        //                }
+        //            }
+        //            if (i == kernel_type_table.Length)
+        //            {
+        //                //Console.Error.Write("unknown kernel function.\n");
+        //                return null;
+        //            }
+        //        }
+        //        else if (cmd.StartsWith("degree"))
+        //            param.degree = atof(arg);
+        //        else if (cmd.StartsWith("gamma"))
+        //            param.gamma = atof(arg);
+        //        else if (cmd.StartsWith("coef0"))
+        //            param.coef0 = atof(arg);
+        //        else if (cmd.StartsWith("nr_class"))
+        //            model.nr_class = atoi(arg);
+        //        else if (cmd.StartsWith("total_sv"))
+        //            model.l = atoi(arg);
+        //        else if (cmd.StartsWith("rho"))
+        //        {
+        //            int n = model.nr_class*(model.nr_class - 1)/2;
+        //            model.rho = new double[n];
+        //            var st = new SupportClass.Tokenizer(arg);
+        //            for (int i = 0; i < n; i++)
+        //                model.rho[i] = atof(st.NextToken());
+        //        }
+        //        else if (cmd.StartsWith("label"))
+        //        {
+        //            int n = model.nr_class;
+        //            model.label = new int[n];
+        //            var st = new SupportClass.Tokenizer(arg);
+        //            for (int i = 0; i < n; i++)
+        //                model.label[i] = atoi(st.NextToken());
+        //        }
+        //        else if (cmd.StartsWith("probA"))
+        //        {
+        //            int n = model.nr_class*(model.nr_class - 1)/2;
+        //            model.probA = new double[n];
+        //            var st = new SupportClass.Tokenizer(arg);
+        //            for (int i = 0; i < n; i++)
+        //                model.probA[i] = atof(st.NextToken());
+        //        }
+        //        else if (cmd.StartsWith("probB"))
+        //        {
+        //            int n = model.nr_class*(model.nr_class - 1)/2;
+        //            model.probB = new double[n];
+        //            var st = new SupportClass.Tokenizer(arg);
+        //            for (int i = 0; i < n; i++)
+        //                model.probB[i] = atof(st.NextToken());
+        //        }
+        //        else if (cmd.StartsWith("nr_sv"))
+        //        {
+        //            int n = model.nr_class;
+        //            model.nSV = new int[n];
+        //            var st = new SupportClass.Tokenizer(arg);
+        //            for (int i = 0; i < n; i++)
+        //                model.nSV[i] = atoi(st.NextToken());
+        //        }
+        //        else if (cmd.StartsWith("SV"))
+        //        {
+        //            break;
+        //        }
+        //        else
+        //        {
+        //            //Console.Error.Write("unknown text in model file\n");
+        //            return null;
+        //        }
+        //    }
+
+        //    // read sv_coef and SV
+
+        //    int m = model.nr_class - 1;
+        //    int l = model.l;
+        //    model.sv_coef = new double[m][];
+        //    for (int i = 0; i < m; i++)
+        //    {
+        //        model.sv_coef[i] = new double[l];
+        //    }
+        //    model.SV = new svm_node[l][];
+
+        //    for (int i = 0; i < l; i++)
+        //    {
+        //        String line = fp.ReadLine();
+        //        var st = new SupportClass.Tokenizer(line, " \t\n\r\f:");
+
+        //        for (int k = 0; k < m; k++)
+        //            model.sv_coef[k][i] = atof(st.NextToken());
+        //        int n = st.Count/2;
+        //        model.SV[i] = new svm_node[n];
+        //        for (int j = 0; j < n; j++)
+        //        {
+        //            model.SV[i][j] = new svm_node();
+        //            //model.SV[i][j].index = atoi(st.NextToken());
+        //            model.SV[i][j].value_Renamed = atof(st.NextToken());
+        //        }
+        //    }
+
+        //    return model;
+        //}
+
+        #endregion
     }
 }

@@ -61,10 +61,10 @@ namespace Encog.MathUtil.LIBSVM
     // LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
     // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
     // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-    [Serializable]
-    public class svm_node
-    {
-        //public int index;
-        public double value_Renamed;
-    }
+    //[Serializable]
+    //public class svm_node
+    //{
+    //    //public int index;
+    //    public double value_Renamed;
+    //}
 }
