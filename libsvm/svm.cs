@@ -1013,16 +1013,27 @@ namespace Encog.MathUtil.LIBSVM
         private static void solve_c_svc(svm_problem prob, svm_parameter param, double[] alpha, Solver.SolutionInfo si,
                                         double Cp, double Cn)
         {
-            int l = prob.dimensionality;
-            var minus_ones = new double[l];
-            var y = new sbyte[l];
+            //grab number of dimensions
+            int classCount = prob.dimensionality;
+
+            //paul-dont know what these are for yet
+
+            //minus ones start as ... minus 1s
+            var minus_ones = new double[classCount];
+            var y = new sbyte[classCount];
 
             int i;
 
-            for (i = 0; i < l; i++)
+            //loop through our initialization
+            for (i = 0; i < classCount; i++)
             {
+                //zero out alpha
                 alpha[i] = 0;
+
+                //initialize to minus 1s
                 minus_ones[i] = - 1;
+
+
                 if (prob.y[i] > 0)
                     y[i] = (+ 1);
                 else
@@ -1030,16 +1041,16 @@ namespace Encog.MathUtil.LIBSVM
             }
 
             var s = new Solver();
-            s.Solve(l, new SVC_Q(prob, param, y), minus_ones, y, alpha, Cp, Cn, param.eps, si, param.shrinking);
+            s.Solve(classCount, new SVC_Q(prob, param, y), minus_ones, y, alpha, Cp, Cn, param.eps, si, param.shrinking);
 
             double sum_alpha = 0;
-            for (i = 0; i < l; i++)
+            for (i = 0; i < classCount; i++)
                 sum_alpha += alpha[i];
 
             /*if (Cp == Cn)
                 Console.Out.Write("nu = " + sum_alpha/(Cp*prob.l) + "\n");*/
 
-            for (i = 0; i < l; i++)
+            for (i = 0; i < classCount; i++)
                 alpha[i] *= y[i];
         }
        
