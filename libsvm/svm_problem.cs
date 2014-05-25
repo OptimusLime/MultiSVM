@@ -64,8 +64,8 @@ namespace Encog.MathUtil.LIBSVM
     [Serializable]
     public class svm_problem
     {
-        public int dimensionality;
-        public double[] y;
+        public int inputCount;
+        public double[] truthTable;
         public double[][] inputs;
     }
 }

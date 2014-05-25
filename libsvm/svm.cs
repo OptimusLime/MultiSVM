@@ -968,12 +968,12 @@ namespace Encog.MathUtil.LIBSVM
         private readonly Cache cache;
         private readonly sbyte[] y;
 
-        internal SVC_Q(svm_problem prob, svm_parameter param, sbyte[] y_) : base(prob.dimensionality, prob.inputs, param)
+        internal SVC_Q(svm_problem prob, svm_parameter param, sbyte[] y_) : base(prob.inputCount, prob.inputs, param)
         {
             y = new sbyte[y_.Length];
             y_.CopyTo(y, 0);
             //UPGRADE_WARNING: Data types in Visual C# might be different.  Verify the accuracy of narrowing conversions. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1042_3"'
-            cache = new Cache(prob.dimensionality, (int) (param.cache_size*(1 << 20)));
+            cache = new Cache(prob.inputCount, (int) (param.cache_size*(1 << 20)));
         }
 
         internal override float[] get_Q(int i, int len)
@@ -1010,22 +1010,22 @@ namespace Encog.MathUtil.LIBSVM
         //
         // construct and solve various formulations
         //
-        private static void solve_c_svc(svm_problem prob, svm_parameter param, double[] alpha, Solver.SolutionInfo si,
+        private static void solve_c_svc(svm_problem problem, svm_parameter param, double[] alpha, Solver.SolutionInfo si,
                                         double Cp, double Cn)
         {
-            //grab number of dimensions
-            int classCount = prob.dimensionality;
+            //grab number of inputs
+            int pInputCount = problem.inputCount;
 
             //paul-dont know what these are for yet
 
             //minus ones start as ... minus 1s
-            var minus_ones = new double[classCount];
-            var y = new sbyte[classCount];
+            var minus_ones = new double[pInputCount];
+            var y = new sbyte[pInputCount];
 
             int i;
 
             //loop through our initialization
-            for (i = 0; i < classCount; i++)
+            for (i = 0; i < pInputCount; i++)
             {
                 //zero out alpha
                 alpha[i] = 0;
@@ -1033,24 +1033,24 @@ namespace Encog.MathUtil.LIBSVM
                 //initialize to minus 1s
                 minus_ones[i] = - 1;
 
-
-                if (prob.y[i] > 0)
+                //y represents what class those inputs belong to (in or out of the class)
+                if (problem.truthTable[i] > 0)
                     y[i] = (+ 1);
                 else
                     y[i] = - 1;
             }
 
             var s = new Solver();
-            s.Solve(classCount, new SVC_Q(prob, param, y), minus_ones, y, alpha, Cp, Cn, param.eps, si, param.shrinking);
+            s.Solve(pInputCount, new SVC_Q(problem, param, y), minus_ones, y, alpha, Cp, Cn, param.eps, si, param.shrinking);
 
             double sum_alpha = 0;
-            for (i = 0; i < classCount; i++)
+            for (i = 0; i < pInputCount; i++)
                 sum_alpha += alpha[i];
 
             /*if (Cp == Cn)
                 Console.Out.Write("nu = " + sum_alpha/(Cp*prob.l) + "\n");*/
 
-            for (i = 0; i < classCount; i++)
+            for (i = 0; i < pInputCount; i++)
                 alpha[i] *= y[i];
         }
        
@@ -1068,7 +1068,7 @@ namespace Encog.MathUtil.LIBSVM
 
         internal static decision_function svm_train_one(svm_problem prob, svm_parameter param, double Cp, double Cn)
         {
-            var alpha = new double[prob.dimensionality];
+            var alpha = new double[prob.inputCount];
             var si = new Solver.SolutionInfo();
             switch (param.svm_type)
             {
@@ -1083,12 +1083,12 @@ namespace Encog.MathUtil.LIBSVM
 
             int nSV = 0;
             int nBSV = 0;
-            for (int i = 0; i < prob.dimensionality; i++)
+            for (int i = 0; i < prob.inputCount; i++)
             {
                 if (Math.Abs(alpha[i]) > 0)
                 {
                     ++nSV;
-                    if (prob.y[i] > 0)
+                    if (prob.truthTable[i] > 0)
                     {
                         if (Math.Abs(alpha[i]) >= si.upper_bound_p)
                             ++nBSV;
@@ -1312,16 +1312,16 @@ namespace Encog.MathUtil.LIBSVM
         {
             int i;
             int nr_fold = 5;
-            var perm = new int[prob.dimensionality];
-            var dec_values = new double[prob.dimensionality];
+            var perm = new int[prob.inputCount];
+            var dec_values = new double[prob.inputCount];
 
             // random shuffle
-            for (i = 0; i < prob.dimensionality; i++)
+            for (i = 0; i < prob.inputCount; i++)
                 perm[i] = i;
-            for (i = 0; i < prob.dimensionality; i++)
+            for (i = 0; i < prob.inputCount; i++)
             {
                 //UPGRADE_WARNING: Data types in Visual C# might be different.  Verify the accuracy of narrowing conversions. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1042_3"'
-                int j = i + (int) (SupportClass.Random.NextDouble()*(prob.dimensionality - i));
+                int j = i + (int) (SupportClass.Random.NextDouble()*(prob.inputCount - i));
                 do
                 {
                     int _ = perm[i];
@@ -1331,31 +1331,31 @@ namespace Encog.MathUtil.LIBSVM
             }
             for (i = 0; i < nr_fold; i++)
             {
-                int begin = i*prob.dimensionality/nr_fold;
-                int end = (i + 1)*prob.dimensionality/nr_fold;
+                int begin = i*prob.inputCount/nr_fold;
+                int end = (i + 1)*prob.inputCount/nr_fold;
                 int j, k;
                 var subprob = new svm_problem();
 
-                subprob.dimensionality = prob.dimensionality - (end - begin);
-                subprob.inputs = new svm_node[subprob.dimensionality][];
-                subprob.y = new double[subprob.dimensionality];
+                subprob.inputCount = prob.inputCount - (end - begin);
+                subprob.inputs = new svm_node[subprob.inputCount][];
+                subprob.truthTable = new double[subprob.inputCount];
 
                 k = 0;
                 for (j = 0; j < begin; j++)
                 {
                     subprob.inputs[k] = prob.inputs[perm[j]];
-                    subprob.y[k] = prob.y[perm[j]];
+                    subprob.truthTable[k] = prob.truthTable[perm[j]];
                     ++k;
                 }
-                for (j = end; j < prob.dimensionality; j++)
+                for (j = end; j < prob.inputCount; j++)
                 {
                     subprob.inputs[k] = prob.inputs[perm[j]];
-                    subprob.y[k] = prob.y[perm[j]];
+                    subprob.truthTable[k] = prob.truthTable[perm[j]];
                     ++k;
                 }
                 int p_count = 0, n_count = 0;
                 for (j = 0; j < k; j++)
-                    if (subprob.y[j] > 0)
+                    if (subprob.truthTable[j] > 0)
                         p_count++;
                     else
                         n_count++;
@@ -1392,7 +1392,7 @@ namespace Encog.MathUtil.LIBSVM
                     }
                 }
             }
-            sigmoid_train(prob.dimensionality, dec_values, prob.y, probAB);
+            sigmoid_train(prob.inputCount, dec_values, prob.truthTable, probAB);
         }
 
         // Return parameter of a Laplace distribution 
@@ -1400,27 +1400,27 @@ namespace Encog.MathUtil.LIBSVM
         {
             int i;
             int nr_fold = 5;
-            var ymv = new double[prob.dimensionality];
+            var ymv = new double[prob.inputCount];
             double mae = 0;
 
             var newparam = (svm_parameter) param.Clone();
             newparam.probability = 0;
             svm_cross_validation(prob, newparam, nr_fold, ymv);
-            for (i = 0; i < prob.dimensionality; i++)
+            for (i = 0; i < prob.inputCount; i++)
             {
-                ymv[i] = prob.y[i] - ymv[i];
+                ymv[i] = prob.truthTable[i] - ymv[i];
                 mae += Math.Abs(ymv[i]);
             }
-            mae /= prob.dimensionality;
+            mae /= prob.inputCount;
             double std = Math.Sqrt(2*mae*mae);
             int count = 0;
             mae = 0;
-            for (i = 0; i < prob.dimensionality; i++)
+            for (i = 0; i < prob.inputCount; i++)
                 if (Math.Abs(ymv[i]) > 5*std)
                     count = count + 1;
                 else
                     mae += Math.Abs(ymv[i]);
-            mae /= (prob.dimensionality - count);
+            mae /= (prob.inputCount - count);
             /*Console.Error.Write(
                 "Prob. model for test data: target value = predicted value + z,\nz: Laplace distribution e^(-|z|/sigma)/(2sigma),sigma=" +
                 mae + "\n");*/
@@ -1438,28 +1438,43 @@ namespace Encog.MathUtil.LIBSVM
           
                 // classification
                 // find out the number of classes
-                int l = prob.dimensionality;
+                int l = prob.inputCount;
+
+                //Paul- max number of allowed classes
                 int max_nr_class = 16;
+                //Paul- will count up to number of actual classes
                 int nr_class = 0;
                 var label = new int[max_nr_class];
                 var count = new int[max_nr_class];
                 var index = new int[l];
 
+                //Paul- This entire loop is simply to count the number of classes we have, and how many of each example we have as well
+                //it's effectively a mapping from label to class identifier
+                //e.g. if we send in truthTable[7] = {0, 3, 3, 2, 1, 1, 1}
+                //then we have label[4] = {0, 3, 2, 1}, and count[4]  = {1, 2, 1, 3}
                 int i;
                 for (i = 0; i < l; i++)
                 {
                     //UPGRADE_WARNING: Data types in Visual C# might be different.  Verify the accuracy of narrowing conversions. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1042_3"'
-                    var this_label = (int) prob.y[i];
+                    //Paul- Get the label associated with this input
+                    //so this input claims that it's digit is 3
+                    var this_label = (int) prob.truthTable[i];
                     int j;
+                    //Paul- first time through nr_class = 0, so this isn't called
                     for (j = 0; j < nr_class; j++)
                         if (this_label == label[j])
                         {
                             ++count[j];
                             break;
                         }
+                    //Paul- index[0] = 0 -- j loop never called
+                    //index represents what label index you are -- i.e. what class you represent
                     index[i] = j;
+
+                    //Paul- j == nr_class = 0
                     if (j == nr_class)
                     {
+                        //Paul- all this does is to make sure you have enough room if you surpass max number of classes
                         if (nr_class == max_nr_class)
                         {
                             max_nr_class *= 2;
@@ -1479,11 +1494,22 @@ namespace Encog.MathUtil.LIBSVM
 
                 // group training data of the same class
 
+                //Paul- Grouping stuff
+                //start represents where things should start when grouped together according to label counts
+                //e.g. if we send in truthTable[7] = {0, 3, 3, 2, 1, 1, 1}
+                //we have 4 classes and 7 examples
+                //then we have start[4] = {0, 1, 4, 5}
+                //here {y} represents a single input for image class y
+                //and x[7][] = { {0}, {1}, {1}, {1}, {2}, {3}, {3}}
+
                 var start = new int[nr_class];
                 start[0] = 0;
                 for (i = 1; i < nr_class; i++)
                     start[i] = start[i - 1] + count[i - 1];
 
+                //Paul- important - x is a re-ordering of the input data -
+                //this code takes all of the samples, then chunks them inside of x according to the digits
+                //so 
                 var x = new svm_node[l][];
 
                 for (i = 0; i < l; i++)
@@ -1492,15 +1518,19 @@ namespace Encog.MathUtil.LIBSVM
                     ++start[index[i]];
                 }
 
+                //Paul- reset start to be correct locations again (we changed it in the above loop)
+
                 start[0] = 0;
                 for (i = 1; i < nr_class; i++)
                     start[i] = start[i - 1] + count[i - 1];
 
                 // calculate weighted C
 
+                //Paul- todo - don't know what weighted c represents yet
                 var weighted_C = new double[nr_class];
                 for (i = 0; i < nr_class; i++)
                     weighted_C[i] = param.C;
+
                 for (i = 0; i < param.nr_weight; i++)
                 {
                     int j;
@@ -1515,6 +1545,9 @@ namespace Encog.MathUtil.LIBSVM
                 }
 
                 // train k*(k-1)/2 models
+                //Paul- As above says, we're going to train a bunch of different models 
+                //these are effectively combinining two classes, and training on them
+                //so 1-2, 2-3, 1-3 if your digits were {1,2,3}
 
                 var nonzero = new bool[l];
                 for (i = 0; i < l; i++)
@@ -1532,22 +1565,25 @@ namespace Encog.MathUtil.LIBSVM
                 for (i = 0; i < nr_class; i++)
                     for (int j = i + 1; j < nr_class; j++)
                     {
+                        //Paul - here we combine problems from the multiple classes
+                        //we take count[class 1] + count[class 2] and combine them
+
                         var sub_prob = new svm_problem();
                         int si = start[i], sj = start[j];
                         int ci = count[i], cj = count[j];
-                        sub_prob.dimensionality = ci + cj;
-                        sub_prob.inputs = new svm_node[sub_prob.dimensionality][];
-                        sub_prob.y = new double[sub_prob.dimensionality];
+                        sub_prob.inputCount = ci + cj;
+                        sub_prob.inputs = new svm_node[sub_prob.inputCount][];
+                        sub_prob.truthTable = new double[sub_prob.inputCount];
                         int k;
                         for (k = 0; k < ci; k++)
                         {
                             sub_prob.inputs[k] = x[si + k];
-                            sub_prob.y[k] = + 1;
+                            sub_prob.truthTable[k] = + 1;
                         }
                         for (k = 0; k < cj; k++)
                         {
                             sub_prob.inputs[ci + k] = x[sj + k];
-                            sub_prob.y[ci + k] = - 1;
+                            sub_prob.truthTable[ci + k] = - 1;
                         }
 
                         if (param.probability == 1)
@@ -1661,15 +1697,15 @@ namespace Encog.MathUtil.LIBSVM
         public static void svm_cross_validation(svm_problem prob, svm_parameter param, int nr_fold, double[] target)
         {
             int i;
-            var perm = new int[prob.dimensionality];
+            var perm = new int[prob.inputCount];
 
             // random shuffle
-            for (i = 0; i < prob.dimensionality; i++)
+            for (i = 0; i < prob.inputCount; i++)
                 perm[i] = i;
-            for (i = 0; i < prob.dimensionality; i++)
+            for (i = 0; i < prob.inputCount; i++)
             {
                 //UPGRADE_WARNING: Data types in Visual C# might be different.  Verify the accuracy of narrowing conversions. 'ms-help://MS.VSCC.2003/commoner/redir/redirect.htm?keyword="jlca1042_3"'
-                int j = i + (int) (SupportClass.Random.NextDouble()*(prob.dimensionality - i));
+                int j = i + (int) (SupportClass.Random.NextDouble()*(prob.inputCount - i));
                 do
                 {
                     int _ = perm[i];
@@ -1679,26 +1715,26 @@ namespace Encog.MathUtil.LIBSVM
             }
             for (i = 0; i < nr_fold; i++)
             {
-                int begin = i*prob.dimensionality/nr_fold;
-                int end = (i + 1)*prob.dimensionality/nr_fold;
+                int begin = i*prob.inputCount/nr_fold;
+                int end = (i + 1)*prob.inputCount/nr_fold;
                 int j, k;
                 var subprob = new svm_problem();
 
-                subprob.dimensionality = prob.dimensionality - (end - begin);
-                subprob.inputs = new svm_node[subprob.dimensionality][];
-                subprob.y = new double[subprob.dimensionality];
+                subprob.inputCount = prob.inputCount - (end - begin);
+                subprob.inputs = new svm_node[subprob.inputCount][];
+                subprob.truthTable = new double[subprob.inputCount];
 
                 k = 0;
                 for (j = 0; j < begin; j++)
                 {
                     subprob.inputs[k] = prob.inputs[perm[j]];
-                    subprob.y[k] = prob.y[perm[j]];
+                    subprob.truthTable[k] = prob.truthTable[perm[j]];
                     ++k;
                 }
-                for (j = end; j < prob.dimensionality; j++)
+                for (j = end; j < prob.inputCount; j++)
                 {
                     subprob.inputs[k] = prob.inputs[perm[j]];
-                    subprob.y[k] = prob.y[perm[j]];
+                    subprob.truthTable[k] = prob.truthTable[perm[j]];
                     ++k;
                 }
                 svm_model submodel = svm_train(subprob, param);
